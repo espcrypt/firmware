@@ -1,0 +1,82 @@
+name: firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.4.2
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: v
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          last=$(git tag -l 'v0.1.*' | sed 's/^v0\.1\.//' | sort -n | tail -1)
+          echo "version=0.1.$(( ${last:-0} + 1 ))" >> "$GITHUB_OUTPUT"
+      - name: Signing key
+        shell: bash
+        env:
+          KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+        run: |
+          . $IDF_PATH/export.sh >/dev/null
+          if [ -n "$KEY" ]; then
+            printf '%s\n' "$KEY" > espcrypt/secure_boot_signing_key.pem
+          elif [ "$GITHUB_REF" = refs/heads/main ] && [ "$GITHUB_EVENT_NAME" = push ]; then
+            echo "::error::FIRMWARE_SIGNING_KEY is not set; refusing to release unsigned firmware"; exit 1
+          else
+            espsecure.py generate_signing_key --version 2 --scheme rsa3072 espcrypt/secure_boot_signing_key.pem
+          fi
+      - name: Build
+        shell: bash
+        env:
+          FIRMWARE_VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          . $IDF_PATH/export.sh >/dev/null
+          python espcrypt/build.py
+          python esp32-passkey/build.py
+          mkdir -p out
+          cp espcrypt/dist/esp32*-vault*-*.bin esp32-passkey/dist/*.bin out/
+      - name: Check signatures
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh >/dev/null
+          for f in out/*-ota.bin; do
+            espsecure.py verify_signature --version 2 --keyfile espcrypt/secure_boot_signing_key.pem "$f"
+          done
+          rm -f espcrypt/secure_boot_signing_key.pem
+          cd out && sha256sum *.bin > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ steps.v.outputs.version }}
+          path: out/*
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware-${{ needs.build.outputs.version }}
+          path: out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: Firmware ${{ needs.build.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: out/*
