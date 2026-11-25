@@ -1,0 +1,9 @@
+**/build/
+**/dist/
+**/managed_components/
+**/secure_boot_signing_key.pem
+**/sdkconfig.old
+esp32-passkey/sdkconfig
+hardware/**/*.stl
+hardware/**/*.3mf
+.DS_Store
