@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../common/board_led")
+if("$ENV{VAULT_WITH_PASSKEY}" STREQUAL "1")
+    list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../common/passkey_core")
+endif()
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(esp_vault_secure_firmware)
