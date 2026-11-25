@@ -1,0 +1,9 @@
+menu "ESP Crypt"
+    config VAULT_WITH_PASSKEY
+        bool "Combined Vault + Passkey firmware (ESP32-S3 USB OTG)"
+        default n
+        depends on IDF_TARGET_ESP32S3
+        help
+            Runs the Vault protocol over a USB OTG CDC port next to a FIDO2
+            security key (firmware/common/passkey_core).
+endmenu
