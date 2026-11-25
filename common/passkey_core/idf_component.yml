@@ -1,0 +1,6 @@
+dependencies:
+  idf: ">=5.1"
+  espressif/esp_tinyusb:
+    version: "^1.4.4"
+    rules:
+      - if: "target == esp32s3"
